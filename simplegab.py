@@ -55,7 +55,7 @@ def updatedb(xmlfile):
 
 def query(query):
     tokens = [_normalize(unicode(s, 'utf-8')) for s in query.split()]
-    query = 'SELECT title, email, kind FROM addresses WHERE 1' + (' AND fulltext LIKE ?' * len(tokens))
+    query = 'SELECT email, title, kind FROM addresses WHERE 1' + (' AND fulltext LIKE ?' * len(tokens))
     cu.execute(query, ['%%%s%%' % t for t in tokens])
     print('\n' + '\n'.join('\t'.join(r) for r in cu.fetchall())),
 
