@@ -1,3 +1,0 @@
-offlineimap = open(os.path.expanduser('~/.config/offlineimap'), 'r').readlines()
-username = [l.split('=')[1].lstrip() for l in offlineimap if l.startswith('remoteuser')][0]
-password = [l.split('=')[1].lstrip() for l in offlineimap if l.startswith('remotepass')][0]

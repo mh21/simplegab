@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # coding=utf-8
+import os
 import os.path
 import sqlite3
 import sys
@@ -9,11 +10,12 @@ ATOM_NS = '{http://www.w3.org/2005/Atom}'
 G_NS = '{http://schemas.google.com/g/2005}'
 GC_NS = '{http://schemas.google.com/contact/2008}'
 
-configfile = os.path.expanduser('~/.config/gabconfig.py')
-database = os.path.expanduser('~/.cache/simplegab.db')
+cacheroot = os.path.expanduser('~/.cache/simplegab/')
+database = cacheroot + 'adresses.db'
 xmlcache = ''
-username = ''
-password = ''
+
+if not os.path.exists(cacheroot):
+    os.makedirs(cacheroot)
 
 def _normalize(string):
     '''Dummy casefold with normalization. Could be better to support cases like ü->ue'''
@@ -33,12 +35,31 @@ def updatedb(xmlfile):
     if xmlfile:
         xml = open(xmlfile, 'r').read()
     else:
-        import gdata.contacts.service
-        gd_client = gdata.contacts.service.ContactsService(additional_headers={gdata.contacts.service.GDATA_VER_HEADER:3})
-        gd_client.ClientLogin(username, password)
-        query = gdata.contacts.service.ContactsQuery()
-        query.max_results = 2000
-        xml = gd_client.GetContactsFeed('https://www.google.com' + query.ToUri()).ToString()
+        import httplib2
+        import logging
+        from oauth2client.file import Storage
+        from oauth2client.client import OAuth2WebServerFlow
+
+        logging.basicConfig(level=logging.ERROR)
+        storage = Storage(cacheroot + 'credentials.json')
+        credentials = storage.get()
+        if not credentials:
+            oaclient = OAuth2WebServerFlow(
+                    '198676491087-pbh0275v2d29mthsnftkgrmnt9h4ptjq.apps.googleusercontent.com',
+                    'lXRf0vfwAWnX9Y-OQEJZlnu3',
+                    'https://www.googleapis.com/auth/contacts.readonly',
+                    'urn:ietf:wg:oauth:2.0:oob',
+                    'contactssync')
+            print('Visit the following URL in your browser to authorise:')
+            print(oaclient.step1_get_authorize_url())
+            auth_code = raw_input('Copy the authorization code from the browser: ')
+            credentials = oaclient.step2_exchange(auth_code)
+            storage.put(credentials)
+
+        http = httplib2.Http()
+        credentials.authorize(http)
+        (headers, xml) = http.request('https://www.google.com/m8/feeds/contacts/default/full?max-results=2000&v=3.0', 'GET')
+
     if xmlcache:
         open(xmlcache, 'w').write(xml)
 
@@ -59,13 +80,6 @@ def query(query):
     cu.execute(query, ['%%%s%%' % t for t in tokens])
     print('\n' + '\n'.join('\t'.join(r) for r in cu.fetchall())),
 
-if len(sys.argv) > 2 and sys.argv[1] == '-c':
-    configfile = sys.argv[2]
-    del sys.argv[1:3]
-
-if os.path.exists(configfile):
-    execfile(configfile)
-
 cx = sqlite3.connect(database)
 cu = cx.cursor()
 
@@ -74,6 +88,5 @@ if len(sys.argv) >= 2 and sys.argv[1] == 'update':
 elif len(sys.argv) == 3 and sys.argv[1] == 'query':
     query(sys.argv[2])
 else:
-    print('Usage: simplegab.py [-c configfile.py] ...')
-    print('       simplegab.py update [file.xml]')
+    print('Usage: simplegab.py update [file.xml]')
     print('       simplegab.py query tokens')
